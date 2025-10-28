@@ -1,0 +1,73 @@
+name: nightly-build
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # Läuft jeden Tag um 06:00 UTC (07:00 in Deutschland)
+  workflow_dispatch:       # erlaubt manuelles Starten
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies (with fallback)
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            echo "✅ Found requirements.txt, installing from file..."
+            pip install -r requirements.txt
+          else
+            echo "⚠️ requirements.txt not found, installing manually..."
+            pip install pandas nba_api openpyxl requests
+          fi
+
+      - name: Show repo structure
+        run: |
+          echo "📁 Repository structure:"
+          ls -R
+
+      - name: Run collector script
+        run: |
+          echo "🚀 Running data collector..."
+          python src/collect.py
+
+      - name: Commit updated JSON if changed
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add public/data/milestones.json || echo "No file to add"
+          git commit -m "Update JSON (auto)" || echo "No changes to commit"
+
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

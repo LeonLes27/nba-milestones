@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>NBA Milestones 2025–26</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 24px; background:#fafafa; }
+    h1 { margin-bottom: 20px; }
+    .bar { display:flex; gap:12px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+    select, input { padding:6px 8px; font-size:14px; }
+    table.dataTable { width:100%!important; }
+  </style>
+</head>
+<body>
+  <h1>NBA Milestones 2025–26</h1>
+  <div class="bar">
+    <label>Team:</label>
+    <select id="team"></select>
+    <label>Filter:</label>
+    <input id="filter" placeholder="z.B. PTS 10+ oder FG2M"/>
+  </div>
+  <table id="tbl" class="display" style="width:100%"></table>
+
+  <!-- Scripts -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+  <script>
+    let DATA = {};
+    async function load() {
+      const res = await fetch("./data/milestones.json", {cache:"no-store"});
+      DATA = await res.json();
+      const teams = Object.keys(DATA).sort();
+      const sel = document.getElementById("team");
+      sel.innerHTML = "";
+      teams.forEach(t => sel.add(new Option(t, t)));
+      sel.onchange = render;
+      document.getElementById("filter").oninput = render;
+      if (teams.length) sel.value = teams[0];
+      render();
+    }
+
+    function render() {
+      const team = document.getElementById("team").value;
+      const search = (document.getElementById("filter").value || "").toLowerCase();
+      const rows = [];
+      const players = (DATA[team] || []).map(p => p.player);
+      if (!players.length) {
+        $('#tbl').DataTable({destroy:true, data:[], columns:[{title:"No data", data:"x"}]});
+        return;
+      }
+      const cols = [{title:"Milestones", data:"Milestones"}]
+        .concat(players.map(p => ({title:p, data:p})));
+
+      const sample = DATA[team][0];
+      const cats = Object.keys(sample.season); // PTS, REB, ...
+      for (const cat of cats) {
+        for (const key of Object.keys(sample.season[cat])) {
+          const label = `${cat} ${key}`;
+          if (search && !label.toLowerCase().includes(search)) continue;
+          const row = { Milestones: label };
+          for (const p of DATA[team]) {
+            const last = p.lastN[cat]?.[key] ?? 0;
+            const full = p.season[cat]?.[key] ?? 0;
+            const gp   = p.gp || 0;
+            const lastPct = (last / 8 * 100).toFixed(2);
+            const fullPct = gp ? (full / gp * 100).toFixed(2) : "0.00";
+            row[p.player] = `${last} (${lastPct}%) / ${full} (${fullPct}%)`;
+          }
+          rows.push(row);
+        }
+      }
+      $('#tbl').DataTable({destroy:true, data: rows, columns: cols, pageLength: 25});
+    }
+    load();
+  </script>
+</body>
+</html>
